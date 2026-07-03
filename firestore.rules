@@ -1,0 +1,90 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helpers ──────────────────────────────────────────────────────────
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && userDoc().isAdmin == true;
+    }
+
+    function isNotBanned() {
+      return isSignedIn() && userDoc().isBanned != true;
+    }
+
+    // ── users/{userId} ──────────────────────────────────────────────────
+    match /users/{userId} {
+      // Any signed-in student can read profiles (names/avatars shown on posts).
+      allow read: if isSignedIn();
+
+      // A user can create only their own profile doc (on registration),
+      // and cannot self-grant isAdmin.
+      allow create: if isOwner(userId) &&
+                       request.resource.data.isAdmin == false &&
+                       request.resource.data.isBanned == false;
+
+      // Users may only update their own non-privileged fields (e.g. avatar/name).
+      // isAdmin / isBanned may only be changed by an admin.
+      allow update: if (isOwner(userId) &&
+                          request.resource.data.isAdmin == resource.data.isAdmin &&
+                          request.resource.data.isBanned == resource.data.isBanned)
+                       || isAdmin();
+
+      allow delete: if isAdmin();
+    }
+
+    // ── posts/{postId} ──────────────────────────────────────────────────
+    match /posts/{postId} {
+      allow read: if isSignedIn();
+
+      allow create: if isSignedIn() && isNotBanned() &&
+                       request.resource.data.authorId == request.auth.uid;
+
+      // Owners can edit/delete their own posts. Admins can moderate any post
+      // (e.g. clearing a flag, or deleting flagged content).
+      allow update: if isSignedIn() &&
+                       (request.auth.uid == resource.data.authorId || isAdmin());
+
+      allow delete: if isSignedIn() &&
+                       (request.auth.uid == resource.data.authorId || isAdmin());
+
+      // ── posts/{postId}/comments/{commentId} ──────────────────────────
+      match /comments/{commentId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn() && isNotBanned() &&
+                         request.resource.data.authorId == request.auth.uid;
+        allow update, delete: if isSignedIn() &&
+                                 (request.auth.uid == resource.data.authorId || isAdmin());
+      }
+    }
+
+    // ── lostFound/{itemId} ──────────────────────────────────────────────
+    match /lostFound/{itemId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isNotBanned() &&
+                       request.resource.data.authorId == request.auth.uid;
+      allow update, delete: if isSignedIn() &&
+                               (request.auth.uid == resource.data.authorId || isAdmin());
+    }
+
+    // ── config/inviteCode ───────────────────────────────────────────────
+    // Publicly readable (registration form needs to validate before auth
+    // exists), but only writable by an already-authenticated admin.
+    match /config/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+  }
+}
