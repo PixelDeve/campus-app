@@ -1,10 +1,13 @@
+import { useState } from 'react';
 import { GraduationCap, LogOut, Moon, ShieldCheck, Sun } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
+import EditProfileModal from '../Profile/EditProfileModal';
 
 export default function TopBar({ activeTab, onNavigate }) {
-  const { profile, logout } = useAuth();
+  const { user, profile, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
+  const [profileOpen, setProfileOpen] = useState(false);
 
   return (
     <header className="sticky top-0 z-20 bg-white/80 dark:bg-ink-950/80 backdrop-blur-md border-b border-paper-200 dark:border-ink-700">
@@ -19,6 +22,18 @@ export default function TopBar({ activeTab, onNavigate }) {
         </div>
 
         <div className="flex items-center gap-1">
+          <button
+            onClick={() => setProfileOpen(true)}
+            aria-label="Edit your profile"
+            className="p-0.5 rounded-full hover:ring-2 hover:ring-signal-500 transition-all"
+          >
+            <img
+              src={profile?.avatarUrl || `https://api.dicebear.com/7.x/notionists/svg?seed=${user?.uid}`}
+              alt="Your profile"
+              className="w-7 h-7 rounded-full object-cover bg-paper-100 dark:bg-ink-800"
+            />
+          </button>
+
           {profile?.isAdmin && (
             <button
               onClick={() => onNavigate(activeTab === 'admin' ? 'feed' : 'admin')}
@@ -51,6 +66,8 @@ export default function TopBar({ activeTab, onNavigate }) {
           </button>
         </div>
       </div>
+
+      {profileOpen && <EditProfileModal onClose={() => setProfileOpen(false)} />}
     </header>
   );
 }

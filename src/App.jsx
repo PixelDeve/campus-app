@@ -7,11 +7,15 @@ import CampusFeed from './components/Feed/CampusFeed';
 import LostFoundGrid from './components/LostFound/LostFoundGrid';
 import CreatePostOverlay from './components/Create/CreatePostOverlay';
 import AdminPanel from './components/Admin/AdminPanel';
+import FriendsPage from './components/Friends/FriendsPage';
+import EventsPage from './components/Events/EventsPage';
+import ChatsPage from './components/Chat/ChatsPage';
 import { Loader2 } from 'lucide-react';
 
 export default function App() {
   const { user, profile, loading } = useAuth();
   const [tab, setTab] = useState('feed');
+  const [pendingChatUser, setPendingChatUser] = useState(null);
 
   if (loading) {
     return (
@@ -25,9 +29,12 @@ export default function App() {
     return <LoginRegister />;
   }
 
-  // Admin tab is only reachable if the user's profile doc has isAdmin: true.
-  // Guard here as defense-in-depth (Firestore rules enforce the real boundary).
   const showAdmin = tab === 'admin' && profile?.isAdmin;
+
+  function handleMessageFriend(friendUser) {
+    setPendingChatUser(friendUser);
+    setTab('chats');
+  }
 
   return (
     <div className="min-h-screen bg-paper-50 dark:bg-ink-950 pb-16">
@@ -37,6 +44,14 @@ export default function App() {
         {showAdmin && <AdminPanel />}
         {!showAdmin && tab === 'feed' && <CampusFeed />}
         {!showAdmin && tab === 'lostfound' && <LostFoundGrid />}
+        {!showAdmin && tab === 'friends' && <FriendsPage onMessage={handleMessageFriend} />}
+        {!showAdmin && tab === 'events' && <EventsPage />}
+        {!showAdmin && tab === 'chats' && (
+          <ChatsPage
+            pendingChatUser={pendingChatUser}
+            onConsumePendingChatUser={() => setPendingChatUser(null)}
+          />
+        )}
       </main>
 
       {!showAdmin && tab === 'feed' && <CreatePostOverlay />}

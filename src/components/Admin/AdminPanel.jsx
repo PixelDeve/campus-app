@@ -9,13 +9,25 @@ import {
   updateDoc,
   where
 } from 'firebase/firestore';
-import { Check, Search, ShieldAlert, ShieldCheck, Trash2, Users } from 'lucide-react';
+import { Calendar, Check, Search, ShieldAlert, ShieldCheck, Trash2, Users, X } from 'lucide-react';
 import { db } from '../../firebase/config';
+
+function formatDateTime(isoString) {
+  if (!isoString) return '';
+  return new Date(isoString).toLocaleString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit'
+  });
+}
 
 export default function AdminPanel() {
   const [users, setUsers] = useState([]);
   const [posts, setPosts] = useState([]);
   const [flaggedPosts, setFlaggedPosts] = useState([]);
+  const [pendingEvents, setPendingEvents] = useState([]);
   const [inviteCode, setInviteCode] = useState('');
   const [inviteSaved, setInviteSaved] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -31,6 +43,10 @@ export default function AdminPanel() {
       query(collection(db, 'posts'), where('flagged', '==', true)),
       (snap) => setFlaggedPosts(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
     );
+    const unsubEvents = onSnapshot(
+      query(collection(db, 'events'), where('status', '==', 'pending')),
+      (snap) => setPendingEvents(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+    );
     const unsubConfig = onSnapshot(doc(db, 'config', 'inviteCode'), (snap) => {
       if (snap.exists()) setInviteCode(snap.data().value || '');
     });
@@ -38,6 +54,7 @@ export default function AdminPanel() {
       unsubUsers();
       unsubPosts();
       unsubFlagged();
+      unsubEvents();
       unsubConfig();
     };
   }, []);
@@ -62,6 +79,14 @@ export default function AdminPanel() {
     await deleteDoc(doc(db, 'posts', postId));
   }
 
+  async function approveEvent(eventId) {
+    await updateDoc(doc(db, 'events', eventId), { status: 'approved' });
+  }
+
+  async function rejectEvent(eventId) {
+    await updateDoc(doc(db, 'events', eventId), { status: 'rejected' });
+  }
+
   async function saveInviteCode() {
     await setDoc(doc(db, 'config', 'inviteCode'), { value: inviteCode.trim() });
     setInviteSaved(true);
@@ -75,11 +100,58 @@ export default function AdminPanel() {
       </h1>
 
       {/* Stat cards */}
-      <div className="grid grid-cols-3 gap-3">
-        <StatCard label="Total users" value={users.length} icon={Users} />
-        <StatCard label="Total posts" value={posts.length} icon={ShieldCheck} />
+      <div className="grid grid-cols-4 gap-2">
+        <StatCard label="Users" value={users.length} icon={Users} />
+        <StatCard label="Posts" value={posts.length} icon={ShieldCheck} />
         <StatCard label="Flagged" value={flaggedPosts.length} icon={ShieldAlert} accent />
+        <StatCard label="Pending events" value={pendingEvents.length} icon={Calendar} accent={pendingEvents.length > 0} />
       </div>
+
+      {/* Pending events */}
+      <section>
+        <h2 className="font-display font-semibold text-base text-ink-900 dark:text-paper-50 mb-3">
+          Pending events
+        </h2>
+        {pendingEvents.length === 0 ? (
+          <p className="text-sm text-ink-600/50 dark:text-paper-100/40">No events awaiting review.</p>
+        ) : (
+          <div className="space-y-3">
+            {pendingEvents.map((event) => (
+              <div
+                key={event.id}
+                className="rounded-card border border-paper-200 dark:border-ink-700 bg-white dark:bg-ink-900 p-4"
+              >
+                <h3 className="font-display font-semibold text-ink-900 dark:text-paper-50">
+                  {event.title}
+                </h3>
+                <p className="text-xs text-ink-600/60 dark:text-paper-100/50 mt-0.5">
+                  Proposed by {event.createdByName} · {formatDateTime(event.startTime)}
+                  {event.location ? ` · ${event.location}` : ''}
+                </p>
+                {event.description && (
+                  <p className="text-sm text-ink-800 dark:text-paper-100/90 mt-2">{event.description}</p>
+                )}
+                <div className="flex gap-2 mt-3">
+                  <button
+                    onClick={() => approveEvent(event.id)}
+                    className="flex items-center gap-1.5 text-sm font-semibold bg-mint-500/10 text-mint-500 px-3 py-2 rounded-lg hover:bg-mint-500/20 transition-colors"
+                  >
+                    <Check className="w-4 h-4" aria-hidden="true" />
+                    Approve
+                  </button>
+                  <button
+                    onClick={() => rejectEvent(event.id)}
+                    className="flex items-center gap-1.5 text-sm font-semibold bg-danger-500/10 text-danger-500 px-3 py-2 rounded-lg hover:bg-danger-500/20 transition-colors"
+                  >
+                    <X className="w-4 h-4" aria-hidden="true" />
+                    Reject
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
 
       {/* Live flagged feed */}
       <section>
@@ -215,10 +287,10 @@ export default function AdminPanel() {
 
 function StatCard({ label, value, icon: Icon, accent }) {
   return (
-    <div className="rounded-card border border-paper-200 dark:border-ink-700 bg-white dark:bg-ink-900 p-4">
+    <div className="rounded-card border border-paper-200 dark:border-ink-700 bg-white dark:bg-ink-900 p-3">
       <Icon className={`w-4 h-4 mb-2 ${accent ? 'text-danger-500' : 'text-signal-500'}`} aria-hidden="true" />
-      <p className="text-2xl font-display font-semibold text-ink-900 dark:text-paper-50">{value}</p>
-      <p className="text-xs text-ink-600/60 dark:text-paper-100/50">{label}</p>
+      <p className="text-xl font-display font-semibold text-ink-900 dark:text-paper-50">{value}</p>
+      <p className="text-[0.65rem] text-ink-600/60 dark:text-paper-100/50">{label}</p>
     </div>
   );
 }

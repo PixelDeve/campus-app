@@ -6,28 +6,46 @@ import {
   signOut,
   updateProfile
 } from 'firebase/auth';
-import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore';
 import { auth, db, FALLBACK_INVITE_CODE } from '../firebase/config';
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
-  const [profile, setProfile] = useState(null); // Firestore users/{uid} doc (isAdmin, isBanned, etc.)
+  const [profile, setProfile] = useState(null); // Firestore users/{uid} doc (isAdmin, isBanned, name, bio, avatarUrl, etc.)
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
+    let unsubProfile = null;
+
+    const unsubAuth = onAuthStateChanged(auth, (firebaseUser) => {
       setUser(firebaseUser);
+
+      // Tear down any previous profile listener when the auth user changes.
+      if (unsubProfile) {
+        unsubProfile();
+        unsubProfile = null;
+      }
+
       if (firebaseUser) {
-        const snap = await getDoc(doc(db, 'users', firebaseUser.uid));
-        setProfile(snap.exists() ? snap.data() : null);
+        // Live-subscribe to the user's own profile doc so edits (name, bio,
+        // avatar) or admin actions (isAdmin/isBanned toggles) reflect
+        // instantly everywhere in the app, without needing a reload.
+        unsubProfile = onSnapshot(doc(db, 'users', firebaseUser.uid), (snap) => {
+          setProfile(snap.exists() ? snap.data() : null);
+          setLoading(false);
+        });
       } else {
         setProfile(null);
+        setLoading(false);
       }
-      setLoading(false);
     });
-    return unsub;
+
+    return () => {
+      unsubAuth();
+      if (unsubProfile) unsubProfile();
+    };
   }, []);
 
   /**
@@ -69,6 +87,7 @@ export function AuthProvider({ children }) {
 
     const userDoc = {
       name,
+      bio: '',
       email: normalizedEmail,
       avatarUrl: '',
       isAdmin: false,
@@ -76,7 +95,8 @@ export function AuthProvider({ children }) {
       createdAt: serverTimestamp()
     };
     await setDoc(doc(db, 'users', credential.user.uid), userDoc);
-    setProfile(userDoc);
+    // No need to setProfile manually here — the onSnapshot listener above
+    // will pick up this newly-created doc automatically.
 
     return credential.user;
   }
