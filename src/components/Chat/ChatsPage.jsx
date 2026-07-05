@@ -2,10 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   collection,
   doc,
-  getDoc,
   onSnapshot,
   query,
-  serverTimestamp,
   setDoc,
   where
 } from 'firebase/firestore';
@@ -79,17 +77,13 @@ export default function ChatsPage({ pendingChatUser, onConsumePendingChatUser })
   async function openOrCreateChat(otherUser) {
     const id = chatIdFor(user.uid, otherUser.id);
     const chatRef = doc(db, 'chats', id);
-    const existing = await getDoc(chatRef);
-    if (!existing.exists()) {
-      await setDoc(chatRef, {
-        participants: [user.uid, otherUser.id],
-        lastMessage: '',
-        lastMessageAt: serverTimestamp(),
-        createdAt: serverTimestamp()
-      });
+    try {
+      await setDoc(chatRef, { participants: [user.uid, otherUser.id] }, { merge: true });
+      setShowPicker(false);
+      setSelectedChat({ id, otherUser });
+    } catch (err) {
+      alert('Chat error: ' + err.message);
     }
-    setShowPicker(false);
-    setSelectedChat({ id, otherUser });
   }
 
   useEffect(() => {

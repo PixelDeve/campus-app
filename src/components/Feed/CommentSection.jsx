@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import {
   addDoc,
   collection,
+  deleteDoc,
   doc,
   increment,
   onSnapshot,
@@ -10,9 +11,20 @@ import {
   serverTimestamp,
   updateDoc
 } from 'firebase/firestore';
-import { SendHorizontal } from 'lucide-react';
+import { SendHorizontal, Trash2 } from 'lucide-react';
 import { db } from '../../firebase/config';
 import { useAuth } from '../../context/AuthContext';
+
+function timeAgo(timestamp) {
+  if (!timestamp?.toDate) return 'now';
+  const seconds = Math.floor((Date.now() - timestamp.toDate().getTime()) / 1000);
+  if (seconds < 60) return 'now';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  return `${Math.floor(hours / 24)}d`;
+}
 
 export default function CommentSection({ postId }) {
   const { user, profile } = useAuth();
@@ -39,13 +51,25 @@ export default function CommentSection({ postId }) {
       await addDoc(collection(db, 'posts', postId, 'comments'), {
         authorId: user.uid,
         authorName: profile?.name || user.displayName || 'Student',
+        authorAvatar: profile?.avatarUrl || '',
         text: text.trim(),
         createdAt: serverTimestamp()
       });
       await updateDoc(doc(db, 'posts', postId), { commentCount: increment(1) });
       setText('');
+    } catch (err) {
+      console.error('Failed to post comment:', err);
     } finally {
       setSending(false);
+    }
+  }
+
+  async function deleteComment(commentId) {
+    try {
+      await deleteDoc(doc(db, 'posts', postId, 'comments', commentId));
+      await updateDoc(doc(db, 'posts', postId), { commentCount: increment(-1) });
+    } catch (err) {
+      console.error('Failed to delete comment:', err);
     }
   }
 
@@ -57,17 +81,41 @@ export default function CommentSection({ postId }) {
         </p>
       )}
 
-      <ul className="space-y-2.5 max-h-64 overflow-y-auto pr-1">
-        {comments.map((c) => (
-          <li key={c.id} className="flex gap-2 text-sm">
-            <span className="font-semibold text-ink-900 dark:text-paper-50 shrink-0">
-              {c.authorName}
-            </span>
-            <span className="text-ink-800/90 dark:text-paper-100/80 break-words">
-              {c.text}
-            </span>
-          </li>
-        ))}
+      <ul className="space-y-3 max-h-72 overflow-y-auto pr-1">
+        {comments.map((c) => {
+          const canDelete = c.authorId === user.uid || profile?.isAdmin;
+          return (
+            <li key={c.id} className="flex gap-2.5">
+              <img
+                src={c.authorAvatar || `https://api.dicebear.com/7.x/notionists/svg?seed=${c.authorId}`}
+                alt={`${c.authorName}'s avatar`}
+                className="w-7 h-7 rounded-full object-cover bg-paper-100 dark:bg-ink-800 shrink-0 mt-0.5"
+              />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-baseline gap-2">
+                  <span className="font-semibold text-sm text-ink-900 dark:text-paper-50">
+                    {c.authorName}
+                  </span>
+                  <span className="text-[0.7rem] text-ink-600/40 dark:text-paper-100/30">
+                    {timeAgo(c.createdAt)}
+                  </span>
+                </div>
+                <p className="text-sm text-ink-800/90 dark:text-paper-100/80 break-words">
+                  {c.text}
+                </p>
+              </div>
+              {canDelete && (
+                <button
+                  onClick={() => deleteComment(c.id)}
+                  aria-label="Delete comment"
+                  className="shrink-0 p-1 text-ink-600/30 hover:text-danger-500 dark:text-paper-100/20 dark:hover:text-danger-400 transition-colors"
+                >
+                  <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+                </button>
+              )}
+            </li>
+          );
+        })}
       </ul>
 
       <form onSubmit={submitComment} className="flex items-center gap-2">

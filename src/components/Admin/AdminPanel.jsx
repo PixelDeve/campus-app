@@ -119,8 +119,16 @@ export default function AdminPanel() {
             {pendingEvents.map((event) => (
               <div
                 key={event.id}
-                className="rounded-card border border-paper-200 dark:border-ink-700 bg-white dark:bg-ink-900 p-4"
+                className="rounded-card border border-paper-200 dark:border-ink-700 bg-white dark:bg-ink-900 overflow-hidden"
               >
+                {event.bannerUrl && (
+                  <img
+                    src={event.bannerUrl}
+                    alt={`${event.title} banner`}
+                    className="w-full h-32 object-cover bg-paper-100 dark:bg-ink-800"
+                  />
+                )}
+                <div className="p-4">
                 <h3 className="font-display font-semibold text-ink-900 dark:text-paper-50">
                   {event.title}
                 </h3>
@@ -146,6 +154,7 @@ export default function AdminPanel() {
                     <X className="w-4 h-4" aria-hidden="true" />
                     Reject
                   </button>
+                </div>
                 </div>
               </div>
             ))}

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   addDoc,
   collection,
@@ -9,9 +9,11 @@ import {
   serverTimestamp,
   where
 } from 'firebase/firestore';
-import { Calendar, Clock, MapPin, Plus, X } from 'lucide-react';
+import { Calendar, Clock, ImagePlus, MapPin, Plus, X } from 'lucide-react';
 import { db } from '../../firebase/config';
 import { useAuth } from '../../context/AuthContext';
+import { compressImage, getPreviewUrl } from '../../utils/imageCompression';
+import { uploadToR2 } from '../../utils/r2Upload';
 
 function formatDateTime(isoString) {
   if (!isoString) return '';
@@ -118,27 +120,37 @@ export default function EventsPage() {
           {sortedApproved.map((event) => (
             <div
               key={event.id}
-              className="rounded-card bg-white dark:bg-ink-900 border border-paper-200 dark:border-ink-700 p-4"
+              className="rounded-card bg-white dark:bg-ink-900 border border-paper-200 dark:border-ink-700 overflow-hidden"
             >
-              <h3 className="font-display font-semibold text-ink-900 dark:text-paper-50">
-                {event.title}
-              </h3>
-              {event.description && (
-                <p className="text-sm text-ink-800/90 dark:text-paper-100/80 mt-1">
-                  {event.description}
-                </p>
+              {event.bannerUrl && (
+                <img
+                  src={event.bannerUrl}
+                  alt={`${event.title} banner`}
+                  loading="lazy"
+                  className="w-full h-36 object-cover bg-paper-100 dark:bg-ink-800"
+                />
               )}
-              <div className="flex flex-col gap-1 mt-2 text-xs text-ink-600/60 dark:text-paper-100/50">
-                <span className="flex items-center gap-1.5">
-                  <Clock className="w-3.5 h-3.5" aria-hidden="true" />
-                  {formatDateTime(event.startTime)}
-                </span>
-                {event.location && (
-                  <span className="flex items-center gap-1.5">
-                    <MapPin className="w-3.5 h-3.5" aria-hidden="true" />
-                    {event.location}
-                  </span>
+              <div className="p-4">
+                <h3 className="font-display font-semibold text-ink-900 dark:text-paper-50">
+                  {event.title}
+                </h3>
+                {event.description && (
+                  <p className="text-sm text-ink-800/90 dark:text-paper-100/80 mt-1">
+                    {event.description}
+                  </p>
                 )}
+                <div className="flex flex-col gap-1 mt-2 text-xs text-ink-600/60 dark:text-paper-100/50">
+                  <span className="flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5" aria-hidden="true" />
+                    {formatDateTime(event.startTime)}
+                  </span>
+                  {event.location && (
+                    <span className="flex items-center gap-1.5">
+                      <MapPin className="w-3.5 h-3.5" aria-hidden="true" />
+                      {event.location}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           ))}
@@ -155,30 +167,40 @@ export default function EventsPage() {
           {sortedMine.map((event) => (
             <div
               key={event.id}
-              className="rounded-card bg-white dark:bg-ink-900 border border-paper-200 dark:border-ink-700 p-4"
+              className="rounded-card bg-white dark:bg-ink-900 border border-paper-200 dark:border-ink-700 overflow-hidden"
             >
-              <div className="flex items-center justify-between">
-                <h3 className="font-display font-semibold text-ink-900 dark:text-paper-50">
-                  {event.title}
-                </h3>
-                <span className={`text-xs font-medium px-2 py-1 rounded-full ${STATUS_STYLES[event.status]}`}>
-                  {event.status}
-                </span>
-              </div>
-              <div className="flex flex-col gap-1 mt-2 text-xs text-ink-600/60 dark:text-paper-100/50">
-                <span className="flex items-center gap-1.5">
-                  <Clock className="w-3.5 h-3.5" aria-hidden="true" />
-                  {formatDateTime(event.startTime)}
-                </span>
-              </div>
-              {event.status === 'pending' && (
-                <button
-                  onClick={() => cancelSubmission(event.id)}
-                  className="mt-2 text-xs font-medium text-danger-500"
-                >
-                  Cancel submission
-                </button>
+              {event.bannerUrl && (
+                <img
+                  src={event.bannerUrl}
+                  alt={`${event.title} banner`}
+                  loading="lazy"
+                  className="w-full h-32 object-cover bg-paper-100 dark:bg-ink-800"
+                />
               )}
+              <div className="p-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-display font-semibold text-ink-900 dark:text-paper-50">
+                    {event.title}
+                  </h3>
+                  <span className={`text-xs font-medium px-2 py-1 rounded-full ${STATUS_STYLES[event.status]}`}>
+                    {event.status}
+                  </span>
+                </div>
+                <div className="flex flex-col gap-1 mt-2 text-xs text-ink-600/60 dark:text-paper-100/50">
+                  <span className="flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5" aria-hidden="true" />
+                    {formatDateTime(event.startTime)}
+                  </span>
+                </div>
+                {event.status === 'pending' && (
+                  <button
+                    onClick={() => cancelSubmission(event.id)}
+                    className="mt-2 text-xs font-medium text-danger-500"
+                  >
+                    Cancel submission
+                  </button>
+                )}
+              </div>
             </div>
           ))}
         </div>
@@ -196,8 +218,24 @@ function ProposeEventForm({ user, profile, onClose }) {
   const [description, setDescription] = useState('');
   const [location, setLocation] = useState('');
   const [startTime, setStartTime] = useState('');
+  const [bannerFile, setBannerFile] = useState(null);
+  const [bannerPreview, setBannerPreview] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const fileInputRef = useRef(null);
+
+  async function handleBannerSelect(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setError('');
+    try {
+      const compressed = await compressImage(file);
+      setBannerFile(compressed);
+      setBannerPreview(getPreviewUrl(compressed));
+    } catch {
+      setError('Could not process that image. Try a different file.');
+    }
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -208,11 +246,17 @@ function ProposeEventForm({ user, profile, onClose }) {
     setBusy(true);
     setError('');
     try {
+      let bannerUrl = null;
+      if (bannerFile) {
+        bannerUrl = await uploadToR2(bannerFile, 'events');
+      }
+
       await addDoc(collection(db, 'events'), {
         title: title.trim(),
         description: description.trim(),
         location: location.trim(),
         startTime: new Date(startTime).toISOString(),
+        bannerUrl,
         createdBy: user.uid,
         createdByName: profile?.name || user.displayName || 'Student',
         status: 'pending',
@@ -245,6 +289,45 @@ function ProposeEventForm({ user, profile, onClose }) {
             <X className="w-5 h-5" aria-hidden="true" />
           </button>
         </div>
+
+        {/* Banner picker */}
+        <label className="text-xs font-medium text-ink-600/70 dark:text-paper-100/60 mb-1 block">
+          Event banner <span className="text-ink-600/40 dark:text-paper-100/30">(optional)</span>
+        </label>
+        {bannerPreview ? (
+          <div className="relative mb-3">
+            <img
+              src={bannerPreview}
+              alt="Event banner preview"
+              className="w-full h-32 object-cover rounded-xl"
+            />
+            <button
+              type="button"
+              onClick={() => { setBannerFile(null); setBannerPreview(null); }}
+              aria-label="Remove banner image"
+              className="absolute top-2 right-2 bg-ink-950/70 text-white rounded-full p-1.5"
+            >
+              <X className="w-4 h-4" aria-hidden="true" />
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="w-full h-24 rounded-xl border-2 border-dashed border-paper-200 dark:border-ink-700 flex flex-col items-center justify-center gap-1 text-ink-600/50 dark:text-paper-100/40 mb-3"
+          >
+            <ImagePlus className="w-5 h-5" aria-hidden="true" />
+            <span className="text-xs">Add a banner photo</span>
+          </button>
+        )}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleBannerSelect}
+          className="hidden"
+          aria-hidden="true"
+        />
 
         <label className="text-xs font-medium text-ink-600/70 dark:text-paper-100/60 mb-1 block">
           Event title

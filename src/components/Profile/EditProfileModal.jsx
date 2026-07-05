@@ -11,6 +11,10 @@ export default function EditProfileModal({ onClose }) {
   const { user, profile } = useAuth();
   const [name, setName] = useState(profile?.name || '');
   const [bio, setBio] = useState(profile?.bio || '');
+  const [studentClass, setStudentClass] = useState(profile?.studentClass || '');
+  const [section, setSection] = useState(profile?.section || '');
+  const [roll, setRoll] = useState(profile?.roll || '');
+  const [group, setGroup] = useState(profile?.group || '');
   const [avatarFile, setAvatarFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(profile?.avatarUrl || '');
   const [saving, setSaving] = useState(false);
@@ -46,6 +50,10 @@ export default function EditProfileModal({ onClose }) {
       await updateDoc(doc(db, 'users', user.uid), {
         name: name.trim(),
         bio: bio.trim(),
+        studentClass: studentClass.trim(),
+        section: section.trim(),
+        roll: roll.trim(),
+        group: group.trim(),
         avatarUrl
       });
 
@@ -115,6 +123,57 @@ export default function EditProfileModal({ onClose }) {
           type="text"
           value={name}
           onChange={(e) => setName(e.target.value)}
+          className="w-full rounded-xl bg-paper-100 dark:bg-ink-800 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-signal-500 mb-3"
+        />
+
+        {/* Class / Section / Roll — three fields side by side to save vertical space */}
+        <div className="grid grid-cols-3 gap-2 mb-3">
+          <div>
+            <label className="text-xs font-medium text-ink-600/70 dark:text-paper-100/60 mb-1 block">
+              Class
+            </label>
+            <input
+              type="text"
+              value={studentClass}
+              onChange={(e) => setStudentClass(e.target.value)}
+              placeholder="10"
+              className="w-full rounded-xl bg-paper-100 dark:bg-ink-800 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-signal-500"
+            />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-ink-600/70 dark:text-paper-100/60 mb-1 block">
+              Section
+            </label>
+            <input
+              type="text"
+              value={section}
+              onChange={(e) => setSection(e.target.value)}
+              placeholder="A"
+              className="w-full rounded-xl bg-paper-100 dark:bg-ink-800 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-signal-500"
+            />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-ink-600/70 dark:text-paper-100/60 mb-1 block">
+              Roll
+            </label>
+            <input
+              type="text"
+              value={roll}
+              onChange={(e) => setRoll(e.target.value)}
+              placeholder="12"
+              className="w-full rounded-xl bg-paper-100 dark:bg-ink-800 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-signal-500"
+            />
+          </div>
+        </div>
+
+        <label className="text-xs font-medium text-ink-600/70 dark:text-paper-100/60 mb-1 block">
+          Group <span className="text-ink-600/40 dark:text-paper-100/30">(optional)</span>
+        </label>
+        <input
+          type="text"
+          value={group}
+          onChange={(e) => setGroup(e.target.value)}
+          placeholder="Science / Commerce / Arts…"
           className="w-full rounded-xl bg-paper-100 dark:bg-ink-800 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-signal-500 mb-3"
         />
 
